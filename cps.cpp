@@ -10,7 +10,6 @@ void manager(const int procs) {
   int count = 0;
   // Distribute Tasks
   while (count < DATA) {
-    MPI_Request req;
     MPI_Status st;
     int dummy = 0;
     int isReady = 0;
