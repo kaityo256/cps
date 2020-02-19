@@ -1,3 +1,4 @@
+#include <chrono>
 #include <cstdio>
 #include <fstream>
 #include <iostream>
@@ -7,28 +8,48 @@
 #include <vector>
 
 std::vector<std::string> command_list;
+std::vector<int> assign_list;
+std::vector<std::chrono::system_clock::time_point> start_time;
+std::vector<double> ellapsed_time;
+
+double get_time(std::chrono::system_clock::time_point start) {
+  auto end = std::chrono::system_clock::now();
+  return std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+}
 
 void manager(const int procs) {
   const int num_tasks = command_list.size();
-  int count = 0;
+  assign_list.resize(procs, -1);
+  start_time.resize(procs);
+  ellapsed_time.resize(num_tasks);
+  int task_index = 0;
+  auto timer_start = std::chrono::system_clock::now();
   // Distribute Tasks
-  while (count < num_tasks) {
+  while (task_index < num_tasks) {
     MPI_Status st;
     int dummy = 0;
     int isReady = 0;
-    for (int i = 1; i < procs && count < num_tasks; i++) {
+    for (int i = 1; i < procs && task_index < num_tasks; i++) {
       // Polling
       MPI_Iprobe(i, 0, MPI_COMM_WORLD, &isReady, &st);
-      if (isReady == 1) {
-        // プロセスiが通信準備完了しているので、ダミーデータを受信してから仕事を割り当てる。
-        MPI_Recv(&dummy, 1, MPI_INT, i, 0, MPI_COMM_WORLD, &st);
-        int len = command_list[count].length() + 1;
-        MPI_Send(&len, 1, MPI_INT, i, 0, MPI_COMM_WORLD);
-        MPI_Send(command_list[count].data(), len, MPI_CHAR, i, 0, MPI_COMM_WORLD);
-        count++;
+      if (!isReady) continue;
+      if (assign_list[i] != -1) {
+        auto start = start_time[i];
+        double elapsed = get_time(start);
+        ellapsed_time[assign_list[i]] = elapsed;
+        printf("task %d assigned to %d is finished at %f\n", task_index, i, get_time(timer_start));
+        assign_list[i] = -1;
       }
+      // Assign task_index-th task to the i-th process
+      assign_list[i] = task_index;
+      start_time[i] = std::chrono::system_clock::now();
+      printf("task %d is assignd to %d at %f\n", task_index, i, get_time(timer_start));
+      MPI_Recv(&dummy, 1, MPI_INT, i, 0, MPI_COMM_WORLD, &st);
+      int len = command_list[task_index].length() + 1;
+      MPI_Send(&len, 1, MPI_INT, i, 0, MPI_COMM_WORLD);
+      MPI_Send(command_list[task_index].data(), len, MPI_CHAR, i, 0, MPI_COMM_WORLD);
+      task_index++;
     }
-    usleep(100);
   }
   // Complete Notification
   std::vector<int> vf;
@@ -51,9 +72,20 @@ void manager(const int procs) {
         MPI_Send(&dummy, 1, MPI_INT, i, 0, MPI_COMM_WORLD);
         finish_check--;
         vf[i] = false;
+        if (assign_list[i] != -1) {
+          auto start = start_time[i];
+          auto end = std::chrono::system_clock::now();
+          double elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+          printf("%d: %f\n", i, elapsed);
+          ellapsed_time[assign_list[i]] = elapsed;
+          assign_list[i] = -1;
+        }
       }
-      usleep(100);
     }
+  }
+  printf("----------\n");
+  for (int i = 0; i < num_tasks; i++) {
+    printf("%d: %f\n", i, ellapsed_time[i]);
   }
 }
 
