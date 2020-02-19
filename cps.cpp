@@ -1,11 +1,23 @@
 #include <chrono>
+#include <cstdarg>
 #include <cstdio>
 #include <fstream>
 #include <iostream>
 #include <mpi.h>
+#include <numeric>
 #include <string>
 #include <unistd.h>
 #include <vector>
+
+template <typename... Args>
+#ifdef DEBUG
+void debug_printf(const char *format, Args const &... args) {
+  printf(format, args...);
+}
+#else
+void debug_printf(const char *, Args const &...) {
+}
+#endif
 
 std::vector<std::string> command_list;
 std::vector<int> assign_list;
@@ -14,7 +26,7 @@ std::vector<double> ellapsed_time;
 
 double get_time(std::chrono::system_clock::time_point start) {
   auto end = std::chrono::system_clock::now();
-  return std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+  return std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() / 1000.0;
 }
 
 void manager(const int procs) {
@@ -37,13 +49,13 @@ void manager(const int procs) {
         auto start = start_time[i];
         double elapsed = get_time(start);
         ellapsed_time[assign_list[i]] = elapsed;
-        printf("task %d assigned to %d is finished at %f\n", task_index, i, get_time(timer_start));
+        debug_printf("task %d assigned to %d is finished at %f\n", task_index, i, get_time(timer_start));
         assign_list[i] = -1;
       }
       // Assign task_index-th task to the i-th process
       assign_list[i] = task_index;
       start_time[i] = std::chrono::system_clock::now();
-      printf("task %d is assignd to %d at %f\n", task_index, i, get_time(timer_start));
+      debug_printf("task %d is assignd to %d at %f\n", task_index, i, get_time(timer_start));
       MPI_Recv(&dummy, 1, MPI_INT, i, 0, MPI_COMM_WORLD, &st);
       int len = command_list[task_index].length() + 1;
       MPI_Send(&len, 1, MPI_INT, i, 0, MPI_COMM_WORLD);
@@ -74,18 +86,29 @@ void manager(const int procs) {
         vf[i] = false;
         if (assign_list[i] != -1) {
           auto start = start_time[i];
-          auto end = std::chrono::system_clock::now();
-          double elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
-          printf("%d: %f\n", i, elapsed);
+          double elapsed = get_time(start);
           ellapsed_time[assign_list[i]] = elapsed;
+          debug_printf("task %d assigned to %d is finished at %f\n", task_index, i, get_time(timer_start));
           assign_list[i] = -1;
         }
       }
     }
   }
-  printf("----------\n");
+  // Generate Log
+  std::ofstream ofs("cps.log");
+  ofs << "Number of tasks : " << num_tasks << std::endl;
+  ofs << "Number of processes : " << procs << std::endl;
+  double total = std::accumulate(ellapsed_time.begin(), ellapsed_time.end(), 0.0);
+  ofs << "Total execution time: " << total << " [s]" << std::endl;
+  double elapsed = get_time(timer_start);
+  ofs << "Elapsed time: " << elapsed << " [s]" << std::endl;
+  double eff = total / (elapsed * (procs - 1));
+  ofs << "Parallel Efficiency : " << eff << std::endl;
+  ofs << std::endl;
+  ofs << "Task list:" << std::endl;
+  ofs << "Command : Elapsed time" << std::endl;
   for (int i = 0; i < num_tasks; i++) {
-    printf("%d: %f\n", i, ellapsed_time[i]);
+    ofs << command_list[i] << " : " << ellapsed_time[i] << " [s]" << std::endl;
   }
 }
 
@@ -100,13 +123,13 @@ void worker(const int rank) {
     MPI_Recv(&len, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, &st);
     // If the length is zero, all tasks are completed.
     if (len == 0) {
-      printf("Finish OK: %d\n", rank);
+      debug_printf("Finish OK: %d\n", rank);
       break;
     }
     std::unique_ptr<char> buf(new char[len]);
     MPI_Recv(buf.get(), len, MPI_CHAR, 0, 0, MPI_COMM_WORLD, &st);
     std::string recv_string = buf.get();
-    printf("%d: Recieved %s\n", rank, recv_string.c_str());
+    debug_printf("%d: Recieved %s\n", rank, recv_string.c_str());
     std::system(recv_string.c_str());
   }
 }
