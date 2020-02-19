@@ -8,23 +8,23 @@
 
 std::vector<std::string> command_list;
 
-const int DATA = 7;                     //タスクの総数
-int data[DATA] = {3, 1, 1, 1, 1, 1, 1}; //タスクの重さ
-
 void manager(const int procs) {
+  const int num_tasks = command_list.size();
   int count = 0;
   // Distribute Tasks
-  while (count < DATA) {
+  while (count < num_tasks) {
     MPI_Status st;
     int dummy = 0;
     int isReady = 0;
-    for (int i = 1; i < procs && count < DATA; i++) {
+    for (int i = 1; i < procs && count < num_tasks; i++) {
       // Polling
       MPI_Iprobe(i, 0, MPI_COMM_WORLD, &isReady, &st);
       if (isReady == 1) {
         // プロセスiが通信準備完了しているので、ダミーデータを受信してから仕事を割り当てる。
         MPI_Recv(&dummy, 1, MPI_INT, i, 0, MPI_COMM_WORLD, &st);
-        MPI_Send(&data[count], 1, MPI_INT, i, 0, MPI_COMM_WORLD);
+        int len = command_list[count].length() + 1;
+        MPI_Send(&len, 1, MPI_INT, i, 0, MPI_COMM_WORLD);
+        MPI_Send(command_list[count].data(), len, MPI_CHAR, i, 0, MPI_COMM_WORLD);
         count++;
       }
     }
@@ -60,35 +60,45 @@ void manager(const int procs) {
 void worker(const int rank) {
   while (true) {
     int send = 10;
-    int recv = 0;
+    int len = 0;
     MPI_Status st;
-    //通信準備完了を知らせるため、ダミーデータを送信
+    // Sends dummy data to notify that communication is ready.
     MPI_Send(&send, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
-    //お仕事データを受け取る
-    MPI_Recv(&recv, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, &st);
-    if (recv == 0) {
-      // 0を受け取ったら、お仕事終了と判断
+    // Recieve the length of a command
+    MPI_Recv(&len, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, &st);
+    // If the length is zero, all tasks are completed.
+    if (len == 0) {
       printf("Finish OK: %d\n", rank);
       break;
     }
-    printf("%d: Recieved %d\n", rank, recv);
-    usleep(recv * 100000);
+    std::unique_ptr<char> buf(new char[len]);
+    MPI_Recv(buf.get(), len, MPI_CHAR, 0, 0, MPI_COMM_WORLD, &st);
+    std::string recv_string = buf.get();
+    printf("%d: Recieved %s\n", rank, recv_string.c_str());
+    std::system(recv_string.c_str());
   }
 }
 
-int main(int argc, char **argv) {
-  MPI_Init(&argc, &argv);
+// Load commands list from a file
+// Success: return 1
+// Error  : return 0
+int loadfile(int argc, char **argv) {
+  int rank, procs;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &procs);
+  if (rank != 0) {
+    return 1;
+  }
   if (argc < 2) {
     std::cout << "Usage: cps commandlist" << std::endl;
-    MPI_Abort(MPI_COMM_WORLD, -1);
+    return 0;
   }
   std::string filename = argv[1];
   std::ifstream ifs(filename);
   if (ifs.fail()) {
     std::cerr << "Could not open " << filename << std::endl;
-    MPI_Abort(MPI_COMM_WORLD, -1);
+    return 0;
   }
-  std::vector<std::string> command_list;
   std::string line;
   while (getline(ifs, line)) {
     if (line.length() > 0 && line[0] == '#') {
@@ -96,19 +106,23 @@ int main(int argc, char **argv) {
     }
     command_list.push_back(line);
   }
-  for (auto s : command_list) {
-    std::cout << s << std::endl;
-  }
-  /*
-  int rank;
-  int procs;
+  return 1;
+}
+
+int main(int argc, char **argv) {
+  MPI_Init(&argc, &argv);
+  int rank, procs;
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   MPI_Comm_size(MPI_COMM_WORLD, &procs);
-  if (rank == 0) {
-    manager(procs);
-  } else {
-    worker(rank);
+  int is_ready = loadfile(argc, argv);
+  int all_ready = 0;
+  MPI_Allreduce(&is_ready, &all_ready, 1, MPI_INT, MPI_LAND, MPI_COMM_WORLD);
+  if (all_ready) {
+    if (rank == 0) {
+      manager(procs);
+    } else {
+      worker(rank);
+    }
   }
-  */
   MPI_Finalize();
 }
