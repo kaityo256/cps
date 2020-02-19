@@ -1,7 +1,12 @@
 #include <cstdio>
+#include <fstream>
+#include <iostream>
 #include <mpi.h>
+#include <string>
 #include <unistd.h>
 #include <vector>
+
+std::vector<std::string> command_list;
 
 const int DATA = 7;                     //タスクの総数
 int data[DATA] = {3, 1, 1, 1, 1, 1, 1}; //タスクの重さ
@@ -73,6 +78,28 @@ void worker(const int rank) {
 
 int main(int argc, char **argv) {
   MPI_Init(&argc, &argv);
+  if (argc < 2) {
+    std::cout << "Usage: cps commandlist" << std::endl;
+    MPI_Abort(MPI_COMM_WORLD, -1);
+  }
+  std::string filename = argv[1];
+  std::ifstream ifs(filename);
+  if (ifs.fail()) {
+    std::cerr << "Could not open " << filename << std::endl;
+    MPI_Abort(MPI_COMM_WORLD, -1);
+  }
+  std::vector<std::string> command_list;
+  std::string line;
+  while (getline(ifs, line)) {
+    if (line.length() > 0 && line[0] == '#') {
+      continue;
+    }
+    command_list.push_back(line);
+  }
+  for (auto s : command_list) {
+    std::cout << s << std::endl;
+  }
+  /*
   int rank;
   int procs;
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -82,5 +109,6 @@ int main(int argc, char **argv) {
   } else {
     worker(rank);
   }
+  */
   MPI_Finalize();
 }
