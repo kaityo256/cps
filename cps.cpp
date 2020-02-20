@@ -126,7 +126,7 @@ void worker(const int rank) {
       debug_printf("Finish OK: %d\n", rank);
       break;
     }
-    std::unique_ptr<char> buf(new char[len]);
+    std::unique_ptr<char[]> buf(new char[len]);
     MPI_Recv(buf.get(), len, MPI_CHAR, 0, 0, MPI_COMM_WORLD, &st);
     std::string recv_string = buf.get();
     debug_printf("%d: Recieved %s\n", rank, recv_string.c_str());
