@@ -39,59 +39,42 @@ void manager(const int procs) {
   // Distribute Tasks
   while (task_index < num_tasks) {
     MPI_Status st;
-    int dummy = 0;
     int isReady = 0;
-    for (int i = 1; i < procs && task_index < num_tasks; i++) {
-      // Polling
-      MPI_Iprobe(i, 0, MPI_COMM_WORLD, &isReady, &st);
-      if (!isReady) continue;
-      if (assign_list[i] != -1) {
-        auto start = start_time[i];
-        double elapsed = get_time(start);
-        ellapsed_time[assign_list[i]] = elapsed;
-        debug_printf("task %d assigned to %d is finished at %f\n", task_index, i, get_time(timer_start));
-        assign_list[i] = -1;
-      }
-      // Assign task_index-th task to the i-th process
-      assign_list[i] = task_index;
-      start_time[i] = std::chrono::system_clock::now();
-      debug_printf("task %d is assignd to %d at %f\n", task_index, i, get_time(timer_start));
-      MPI_Recv(&dummy, 1, MPI_INT, i, 0, MPI_COMM_WORLD, &st);
-      int len = command_list[task_index].length() + 1;
-      MPI_Send(&len, 1, MPI_INT, i, 0, MPI_COMM_WORLD);
-      MPI_Send(command_list[task_index].data(), len, MPI_CHAR, i, 0, MPI_COMM_WORLD);
-      task_index++;
+    MPI_Recv(&isReady, 1, MPI_INT, MPI_ANY_SOURCE, 0, MPI_COMM_WORLD, &st);
+    int i = st.MPI_SOURCE;
+    if (assign_list[i] != -1) {
+      auto start = start_time[i];
+      double elapsed = get_time(start);
+      ellapsed_time[assign_list[i]] = elapsed;
+      debug_printf("task %d assigned to %d is finished at %f\n", task_index, i, get_time(timer_start));
+      assign_list[i] = -1;
     }
+    // Assign task_index-th task to the i-th process
+    assign_list[i] = task_index;
+    start_time[i] = std::chrono::system_clock::now();
+    debug_printf("task %d is assignd to %d at %f\n", task_index, i, get_time(timer_start));
+    int len = command_list[task_index].length() + 1;
+    MPI_Send(&len, 1, MPI_INT, i, 0, MPI_COMM_WORLD);
+    MPI_Send(command_list[task_index].data(), len, MPI_CHAR, i, 0, MPI_COMM_WORLD);
+    task_index++;
   }
   // Complete Notification
-  std::vector<int> vf;
-  for (int i = 0; i < procs; i++) {
-    vf.push_back(false);
-  }
   int finish_check = procs - 1;
 
   while (finish_check > 0) {
     MPI_Status st;
     int dummy = 0;
     int recv = 0;
-    int isReady = 0;
-    for (int i = 1; i < procs; i++) {
-      if (vf[i]) break;
-      isReady = false;
-      MPI_Iprobe(i, 0, MPI_COMM_WORLD, &isReady, &st);
-      if (isReady) {
-        MPI_Recv(&recv, 1, MPI_INT, i, 0, MPI_COMM_WORLD, &st);
-        MPI_Send(&dummy, 1, MPI_INT, i, 0, MPI_COMM_WORLD);
-        finish_check--;
-        vf[i] = false;
-        if (assign_list[i] != -1) {
-          auto start = start_time[i];
-          double elapsed = get_time(start);
-          ellapsed_time[assign_list[i]] = elapsed;
-          debug_printf("task %d assigned to %d is finished at %f\n", task_index, i, get_time(timer_start));
-          assign_list[i] = -1;
-        }
-      }
+    MPI_Recv(&recv, 1, MPI_INT, MPI_ANY_SOURCE, 0, MPI_COMM_WORLD, &st);
+    int i = st.MPI_SOURCE;
+    MPI_Send(&dummy, 1, MPI_INT, i, 0, MPI_COMM_WORLD);
+    finish_check--;
+    if (assign_list[i] != -1) {
+      auto start = start_time[i];
+      double elapsed = get_time(start);
+      ellapsed_time[assign_list[i]] = elapsed;
+      debug_printf("task %d assigned to %d is finished at %f\n", task_index, i, get_time(timer_start));
+      assign_list[i] = -1;
     }
   }
   // Generate Log
