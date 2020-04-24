@@ -8,6 +8,7 @@
 #include <string>
 #include <unistd.h>
 #include <vector>
+#include <memory>
 
 template <typename... Args>
 #ifdef DEBUG
