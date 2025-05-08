@@ -3,16 +3,16 @@
 #include <cstdio>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <mpi.h>
 #include <numeric>
 #include <string>
 #include <unistd.h>
 #include <vector>
-#include <memory>
 
 template <typename... Args>
 #ifdef DEBUG
-void debug_printf(const char *format, Args const &... args) {
+void debug_printf(const char *format, Args const &...args) {
   printf(format, args...);
 }
 #else
@@ -148,14 +148,28 @@ int loadfile(int argc, char **argv) {
   return 1;
 }
 
+#include <mpi.h>
+#include <stdio.h>
+
 int main(int argc, char **argv) {
   MPI_Init(&argc, &argv);
   int rank, procs;
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   MPI_Comm_size(MPI_COMM_WORLD, &procs);
+
+  if (argc < 2 || procs < 2) {
+    if (rank == 0) {
+      fprintf(stderr, "Usage: mpirun -np num_procs ./cps tasklist\n");
+      fprintf(stderr, "num_procs must be 2 or more.\n");
+    }
+    MPI_Finalize();
+    return 1;
+  }
+
   int is_ready = loadfile(argc, argv);
   int all_ready = 0;
   MPI_Allreduce(&is_ready, &all_ready, 1, MPI_INT, MPI_LAND, MPI_COMM_WORLD);
+
   if (all_ready) {
     if (rank == 0) {
       manager(procs);
@@ -163,5 +177,7 @@ int main(int argc, char **argv) {
       worker(rank);
     }
   }
+
   MPI_Finalize();
+  return 0;
 }
