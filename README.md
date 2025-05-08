@@ -8,14 +8,16 @@ Execute shell commands in parallel.
 mpirun -np num_procs ./cps tasklist
 ```
 
-For example,
+## Example
+
+To compile and execute with 4 processes:
 
 ```sh
 make
 mpirun -np 4 ./cps task.sh
 ```
 
-The shell commands are given by list.
+The list of shell commands should be provided in a file, as shown below:
 
 ```sh
 $ cat task.sh
@@ -28,9 +30,11 @@ sleep 1.3
 sleep 1.2
 ```
 
-The lines beginning with `#` are considered to be comment.
+Lines beginning with # are treated as comments and are ignored during execution.
 
-It will generate a log file `cps.log` after execution.
+## Output
+
+After execution, a log file named cps.log will be generated:
 
 ```sh
 $ cat cps.log
@@ -50,12 +54,22 @@ sleep 1.3 : 1.308 [s]
 sleep 1.2 : 1.204 [s]
 ```
 
-One process is used for scheduler. Therefore, the number of processes to execute tasks is `num_procs - 1`.
-In this case, the total execution time is 7.043 s and the elapsed time (wall time) is 2.613 s. The effective number of processes is 3 (4-1).
+## Parallel Execution Details
 
-Therefore, the parallel efficiency for this case is
+One process is reserved for scheduling, so the number of processes available for executing tasks is `num_procs - 1`.
 
-7.043 / (2.613 * 3) = 0.8984564357698686 ~ 89.8%
+In the example above:
+
+* The total execution time is 7.043 seconds.
+* The elapsed time (wall time) is 2.613 seconds.
+* The effective number of worker processes is 4 - 1 = 3.
+
+
+Therefore, the parallel efficiency is calculated as:
+
+```python
+7.043 / (2.613 * 3) = 0.898456 ≈ 89.8%
+```
 
 ## License
 
