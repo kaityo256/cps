@@ -34,7 +34,7 @@ Lines beginning with # are treated as comments and are ignored during execution.
 
 ## Output
 
-After execution, a log file named cps.log will be generated:
+After execution, a log file named `cps.log` will be generated:
 
 ```sh
 $ cat cps.log
